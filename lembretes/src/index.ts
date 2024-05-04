@@ -1,15 +1,12 @@
 import express from 'express'
 import cors from 'cors'
 import { v4 as uuid4 } from 'uuid'
+import { Reminder } from './types'
+import { apiEvents } from './api'
 
 const app = express()
 app.use(cors())
 app.use(express.json())
-
-type Reminder = {
-  id: string
-  text: string
-}
 
 const reminders: Reminder[] = []
 
@@ -43,7 +40,7 @@ app.get('/reminders/:id', (req, res) => {
   res.status(200).json(reminder)
 })
 
-app.post('/reminders', (req, res) => {
+app.post('/reminders', async (req, res) => {
   const { text } = req.body
 
   if (!text)
@@ -56,11 +53,40 @@ app.post('/reminders', (req, res) => {
     text
   }
 
-  reminders.push(newReminder)
+  try {
+    await apiEvents.post('/events', {
+      type: 'reminderCreated',
+      payload: newReminder
+    })
+  } catch (error) {
+    console.error(error)
+  }
 
   res.status(201).json({
     reminder: newReminder,
-    message: 'The reminder was created'
+    message: 'The reminder is being created'
+  })
+})
+
+app.post('/events', (req, res) => {
+  const event = req.body
+
+  if (!event.type || !event.payload) {
+    return res.status(400).json({
+      message: 'Missing type or payload'
+    })
+  }
+
+  if (event.type === 'reminderCreated') {
+    const { id, text } = event.payload
+    reminders.push({ id, text })
+  }
+
+  console.log('Received event:', event)
+
+  res.status(201).json({
+    reminder: event.payload,
+    message: 'The event was received and processed'
   })
 })
 
